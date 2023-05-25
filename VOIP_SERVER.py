@@ -1,35 +1,47 @@
 import pyaudio
 import socket
+import tkinter
+import threading
+
+po=tkinter.Tk()
 
 chunk = 1024
-pa = pyaudio.PyAudio()
+p = pyaudio.PyAudio()
 
-stream = pa.open(format = pyaudio.paInt16,
+stream = p.open(format = pyaudio.paInt16,
                 channels = 1,
                 rate = 10240,
                 output = True)
 
-# Socket Initialization
 host = 'localhost'
-port = 50000
+port = 65535
 backlog = 5
 size = 1024
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.bind((host,port))
-sock.listen(backlog)
 
-client, address = sock.accept()
-print ("Server is now running\n=======================")
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind((host,port))
+s.listen(backlog)
 
-# Main Functionality
-while 1:
-    data = client.recv(size)
-    if data:
-        # Write data to pyaudio stream
-        stream.write(data)  # Stream the recieved audio data
-        client.send('ACK')  # Send an ACK
+client, address = s.accept()
 
+def li():
+    while 1:
+        data = client.recv(size)
+        if data:
+            stream.write(data)
+            client.send(b'ACK')
+
+def start_li_thread():
+    li_thread = threading.Thread(target=li)
+    print("check")
+    li_thread.start()
+    
+po.title("Server")
+m=tkinter.Button(po,width=40,text='Start',command=start_li_thread,fg='black')
+m1=tkinter.Button(po,width=50,text='Exit',command=po.destroy)
+m.pack()
+m1.pack()
+po.mainloop()
 client.close()
 stream.close()
-pa.terminate()
-print ("Server has stopped running")
+p.terminate()

@@ -1,72 +1,109 @@
+#!/usr/bin/env python
 import pyaudio
 import socket
+import sys
+import wave
+import tkinter
 import threading
-from Tkinter import *
 
-# Pyaudio Initialization
-chunk = 1024
+po = tkinter.Tk()
+CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 10240
+WAVE_OUTPUT_FILENAME = "recording.wav"
+
+counter = 0
+is_recording = False 
+
+def counter_label(label):
+    counter = 0
+
+    def count():
+        nonlocal counter
+        counter += 1
+        label.config(text=str(counter))
+        label.after(1000, count)
+
+    count()
+
+po.title("Client")
+label = tkinter.Label(po, fg="dark green")
+label.pack()
 
 p = pyaudio.PyAudio()
+stream = p.open(format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                input=True,
+                frames_per_buffer=CHUNK)
 
-stream = p.open(format = FORMAT,
-                channels = CHANNELS,
-                rate = RATE,
-                input = True,
-                frames_per_buffer = chunk)
-
-# Socket Initialization
 host = 'localhost'
-port = 50000
+port = 65535
 size = 1024
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.connect((host,port))
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((host, port))
+frames = []
 
-class VOIP_FRAME(Frame):
-    
-    def OnMouseDown(self, event):
-        self.mute = False
-        self.speakStart()
-        
-    def muteSpeak(self,event):
-        self.mute = True
-        print("You are now muted")
-        
-    def speakStart(self):
-        t = threading.Thread(target=self.speak)
-        t.start()
-                
-    def speak(self):
-        print("You are now speaking")
-        while self.mute is False:
-            data = stream.read(chunk)
-            s.send(data)
-            s.recv(size)
-        
 
-    def createWidgets(self):
-        self.speakb = Button(self)
-        self.speakb["text"] = "Speak"
-        self.speakb.pack({"side": "left"})
+def listen_thread():
+    while True:
+        data = stream.read(CHUNK)
+        s.send(data)
+        s.recv(size)
 
-        self.speakb.bind("<ButtonPress-1>", self.OnMouseDown)
-        self.speakb.bind("<ButtonRelease-1>", self.muteSpeak)
 
-    def __init__(self, master=None):
-        self.mute = True
-        Frame.__init__(self, master)
-        self.mouse_pressed = False
-        self.pack()
-        self.createWidgets()
+def record_thread():
+    global is_recording
+    print("* recording")
+    counter_label(label)
+    is_recording = True
+    frames.clear()
+    while is_recording:
+        data = stream.read(CHUNK)
+        s.send(data)
+        frames.append(data)
+    print("* done recording")
+    if frames:
+        wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+    is_recording = False
 
-root = Tk()
-app = VOIP_FRAME(master=root)
-app.mainloop()
-root.destroy()
+
+def lis():
+    threading.Thread(target=listen_thread, daemon=True).start()
+
+
+def rec():
+    threading.Thread(target=record_thread, daemon=True).start()
+
+
+def stop_recording():
+    global is_recording
+    global counter
+    counter = 0
+    label.config(text=str(counter))
+    is_recording = False
+
+
+def ex():
+    sys.exit(0)
+
+
+b = tkinter.Button(po, text='Listen', width=40, command=lis, fg='black')
+b1 = tkinter.Button(po, text='Record', width=40, command=rec, bg='white')
+b2 = tkinter.Button(po, text='Stop', width=25, command=stop_recording)
+b3 = tkinter.Button(po, text='Exit', width=40, command=po.destroy)
+b.pack()
+b1.pack()
+b2.pack()
+b3.pack()
+
+po.mainloop()
 s.close()
 stream.close()
 p.terminate()
-
-    
